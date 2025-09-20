@@ -184,7 +184,7 @@ var yimmy =
       },
       start: function () {
         // processData(a);
-        processData(b);
+        //processData(b);
         setInterval(update2, 300); //was 600; 300 currently
         main();
         // BEGIN LOOP
