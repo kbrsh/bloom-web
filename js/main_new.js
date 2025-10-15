@@ -1,96 +1,52 @@
-var NUM_PALETTES = 9;
+//var NUM_PALETTES = 10;
 var NUM_RINGS_PER_BLOOM = 5; // 16
+const PALETTE_FILES = [
+  "palette1.jpg",
+  "palette2.jpg",
+  "palette3.jpg",
+  "palette4.jpg",
+  "palette5.jpg",
+  "palette6.jpg",
+  "palette7.jpg",
+  "palette8.jpg",
+  "palette9.jpg",
+  "palette10.jpg",
+];
 
-//LOAD COLOR PALETTES
+const palettes = []; // will hold {canvas, context, width, height, image}
 
-var contexts = [];
-
-for (k = 1; k < NUM_PALETTES + 1; k++) {
-  var canvas = document.getElementById("viewport" + k);
-  var context = canvas.getContext("2d");
-  contexts.push(context);
-  var fileName = "palette" + k + ".jpg";
-  make_img(fileName, context);
+async function loadPalettes() {
+  for (const fileName of PALETTE_FILES) {
+    const img = await loadImage(fileName);
+    const canvas = document.createElement("canvas");
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+    palettes.push({
+      canvas,
+      context: ctx,
+      width: img.width,
+      height: img.height,
+      image: img,
+    });
+  }
 }
 
-function make_img(fileName, context) {
-  var img = new Image();
-  img.src = fileName;
-  img.onload = function () {
-    context.drawImage(img, 0, 0);
-  };
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+function getRandomPalette() {
+  return palettes[Math.floor(Math.random() * palettes.length)];
 }
 
 //PROCESS DATA
-
-var a = [
-  726, 891, 664, 37, 152, 273, 456, 787, 881, 509, 257, 470, 517, 734, 568, 557,
-  876, 876, 260, 193, 491, 166, 289, 830, 524, 408, 380, 266, 872, 590, 485,
-  611, 656, 354, 107, 758, 251, 346, 430, 236, 336, 294, 844, 497, 676, 85, 715,
-  852, 729, 108, 491, 630, 236, 481, 149, 527, 519, 113, 429, 327, 308, 575,
-  381, 420, 558, 631, 679, 609, 690, 689, 95, 479, 863, 485, 98, 768, 155, 516,
-  860, 287, 660, 24, 177, 700, 788, 673, 64, 459, 366, 83, 239, 33, 463, 603,
-  276, 176, 305, 824, 147, 842, 440, 393, 257, 439, 774, 779, 463, 388, 450,
-  512, 525, 677, 598, 43, 670, 387, 27, 168, 648, 18, 423, 650, 676, 585, 462,
-  314, 293, 770, 861, 295, 768, 286, 464, 257, 621, 25, 415, 54, 547, 230, 146,
-  99, 718, 871, 827, 502, 64, 558, 249, 78, 491, 17, 352, 518, 405, 69, 447,
-  807, 20, 132, 757, 46, 245, 423, 570, 791, 448, 791, 331, 569, 42, 823, 592,
-  576, 697, 762, 837, 420, 337, 321, 723, 841, 683, 487, 867, 341, 83, 75, 494,
-  346, 547, 115, 103, 47, 507, 622, 693, 371, 500, 150, 17, 526, 274, 203, 182,
-  727, 705, 16, 778, 893, 330, 422, 161, 409, 266, 742, 861, 227, 459, 468, 402,
-  238, 274, 631, 734, 146, 819, 153, 693, 154, 719, 160, 716, 430, 385, 540,
-  136, 499, 336, 151, 50, 46, 773, 333, 758, 154, 606, 460, 23, 332, 475, 378,
-  469, 373, 274, 729, 179, 597, 13, 25, 850, 29, 742, 707, 151, 222, 862, 164,
-  636, 577, 677, 424, 862, 419, 283, 203, 826, 196, 31, 237, 44, 6, 843, 783,
-  430, 645, 294, 358, 250, 830, 402, 81, 761, 443, 316, 485, 95, 637, 407, 741,
-  346, 539, 222, 482, 898, 258, 187, 299, 510, 633, 82, 108, 633, 646, 125, 20,
-  215, 562, 891, 777, 625, 30, 443, 196, 248, 23, 469, 295, 319, 329, 27, 885,
-  864, 686, 47, 768, 687, 601, 422, 430, 685, 391, 786, 876, 678, 626, 176, 50,
-  899, 489, 363, 799, 810, 180, 560, 716, 105, 850, 81, 248, 174, 707, 779, 125,
-  564, 695, 565, 359, 560, 353, 320, 279, 553, 153, 635, 442, 290, 229, 661,
-  752, 57, 896, 116, 70, 33, 170, 295, 101, 344, 683, 789, 321, 286, 101, 210,
-  374, 335, 227, 167, 421, 172, 716, 424, 180, 857, 886, 572, 209, 467, 481,
-  674, 2, 386, 235, 769, 294, 354, 518, 685, 862, 589, 545, 110, 437, 284, 732,
-  880, 856, 357, 355, 657, 427, 670, 39, 399, 107, 792, 830, 517, 588, 270, 562,
-  37, 125, 5, 384, 734, 479, 394, 246, 135, 808, 522, 873, 483, 434, 592, 375,
-  349, 415, 362, 346, 190, 71, 866, 780, 257, 359, 474, 211, 528, 898, 685, 855,
-  421, 826, 784, 587, 446, 489, 325, 366, 730, 496, 656, 793, 79, 143, 570, 532,
-  118, 796, 64, 43, 98, 336, 396, 77, 96, 116, 349, 78, 19, 414, 203, 42, 887,
-  790, 158, 358, 489, 109, 893, 542, 543, 474, 72, 898, 14, 569, 791, 632, 426,
-  656, 487, 342, 43, 241, 259, 459, 672, 24, 655, 342, 823, 391, 326, 302, 180,
-  555, 234, 797, 747, 608, 366, 128, 142, 253, 552, 872, 704, 782, 113, 325,
-  418, 752, 847, 508, 667, 648, 5, 50, 717, 179, 403, 533, 36, 325, 688, 540,
-  491, 617, 691, 465, 14, 475, 215, 725, 694, 776, 196, 451, 26, 662, 218, 476,
-  5, 257, 272, 590, 536, 763, 654, 813, 843, 604, 341, 123, 283, 654, 315, 826,
-  113, 395, 867, 659, 18, 567, 148, 177, 785, 304, 843, 502, 842, 700, 477, 622,
-  77, 16, 178, 306, 101, 104, 717, 642, 62, 189, 732, 591, 757, 783, 421, 507,
-  782, 571, 168, 521, 702, 257, 8, 766, 570, 322, 638, 308, 148, 347, 331, 338,
-  645, 438, 55, 474, 211, 41, 17, 238, 577, 438, 768, 825, 336, 418, 333, 559,
-  804, 456, 779, 164, 302, 504, 866, 457, 737, 260, 816, 182, 884, 738, 448,
-  875, 114, 591, 494, 857, 130, 274, 430, 158, 590, 502, 263, 681, 588, 98, 533,
-  67, 613, 68, 680, 230, 188, 498, 606, 790, 569, 348, 829, 524, 117, 374, 653,
-  861, 147, 189, 832, 611, 556, 805, 546, 535, 489, 122, 187, 893, 236, 803,
-  102, 468, 317, 346, 420, 885, 733, 248, 678, 894, 751, 556, 199, 493, 347,
-  230, 305, 614, 419, 86, 723, 634, 422, 867, 55, 56, 277, 291, 415, 869, 804,
-  324, 273, 601, 361, 116, 655, 503, 124, 97, 415, 288, 57, 115, 728, 435, 442,
-  564, 437, 192, 565, 380, 247, 504, 869, 53, 276, 62, 819, 135, 726, 278, 624,
-  47, 699, 530, 811, 166, 261, 732, 193, 704, 35, 90, 592, 701, 277, 171, 81,
-  448, 360, 54, 255, 612, 584, 206, 605, 97, 159, 271, 99, 256, 81, 461, 562,
-  104, 564, 437, 225, 564, 325, 304, 689, 80, 652, 855, 339, 136, 689, 828, 182,
-  138, 486, 342, 19, 889, 56, 196, 501, 425, 270, 618, 37, 508, 769, 678, 288,
-  294, 471, 856, 390, 388, 129, 295, 240, 203, 653, 283, 475, 704, 451, 828,
-  647, 850, 288, 528, 641, 3, 179, 282, 465, 335, 437, 749, 80, 84, 125, 674,
-  142, 287, 375, 758, 722, 24, 570, 187, 303, 28, 631, 345, 44, 372, 636, 533,
-  447, 187, 719, 638, 832, 733, 564, 452, 51, 37, 388, 166, 760, 141, 193, 323,
-  391, 688, 298, 36, 748, 78, 764, 463, 535, 489, 843, 463, 605, 320, 83, 204,
-  67, 237, 517, 784, 894, 672, 699, 446, 189, 247, 826, 843, 795, 384, 795, 131,
-  429, 896, 464, 46, 839, 351, 771, 62, 499, 455, 49, 825, 702, 459, 744, 308,
-  614, 122, 503, 155, 179, 799, 247, 284, 758, 321, 606, 875, 674, 724, 290,
-  265, 451, 339, 109, 192, 833, 442, 878, 845, 281, 540, 462, 330, 691, 234,
-  100, 1, 213, 754, 0,
-];
-var b = a.slice(0, 30);
-
 const pad = (num) => String(num).padStart(2, "0");
 function formatTime(timestamp) {
   const date = new Date(timestamp);
@@ -157,8 +113,8 @@ function processData(data) {
   lastRawData[0] = data[data.length - 3];
 }
 
-var canvas = document.getElementById("canvas");
-var ctx = canvas.getContext("2d");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
 
 //var canvas = document.createElement("canvas");
 //var ctx = canvas.getContext("2d");
@@ -182,9 +138,10 @@ var yimmy =
         // Acquire args from HTML if necessary
         _args = Args;
       },
-      start: function () {
+      start: async function () {
         // processData(a);
         //processData(b);
+        await loadPalettes();
         setInterval(update2, 300); //was 600; 300 currently
         main();
         // BEGIN LOOP
@@ -241,24 +198,33 @@ function createBloom(counter, iParam) {
   var x = ((time / 3) * 300) % svgW;
   x = getRandomInt(0, svgW);
 
-  var randomPaletteIndex = getRandomInt(0, NUM_PALETTES);
-  randomPaletteIndex = NUM_PALETTES - 1;
-  var randomContext = contexts[randomPaletteIndex];
+  //const palette = getRandomPalette();
+  const palette = palettes[9];
+  const randomContext = palette.context;
+  let randomX = getRandomInt(0, palette.width);
+  let randomY = getRandomInt(0, palette.height);
+  const colors = [];
 
-  var colors = [];
+  for (let i = 0; i < numRings; i++) {
+    randomX = mod(
+      randomX - getRandomInt(0, Math.floor(palette.width / 3)),
+      palette.width,
+    );
+    randomY = mod(
+      randomY - getRandomInt(0, Math.floor(palette.height / 3)),
+      palette.height,
+    );
 
-  var w = getImgWidth(randomPaletteIndex);
-  var h = getImgHeight(randomPaletteIndex);
-  var randomX = getRandomInt(0, w);
-  var randomY = getRandomInt(0, h);
-
-  for (i = 0; i < numRings; i++) {
-    randomX = mod(randomX - getRandomInt(0, Math.floor(w / 3)), w);
-    randomY = mod(randomY - getRandomInt(0, Math.floor(h / 3)), h);
-    var pixelData = randomContext.getImageData(randomX, randomY, 1, 1).data;
+    let pixelData = randomContext.getImageData(randomX, randomY, 1, 1).data;
     while (!isColorValid(pixelData[0], pixelData[1], pixelData[2])) {
-      randomX = mod(randomX - getRandomInt(0, Math.floor(w / 3)), w);
-      randomY = mod(randomY - getRandomInt(0, Math.floor(h / 3)), h);
+      randomX = mod(
+        randomX - getRandomInt(0, Math.floor(palette.width / 3)),
+        palette.width,
+      );
+      randomY = mod(
+        randomY - getRandomInt(0, Math.floor(palette.height / 3)),
+        palette.height,
+      );
       pixelData = randomContext.getImageData(randomX, randomY, 1, 1).data;
     }
     colors.push(rgb2hsv(pixelData[0], pixelData[1], pixelData[2]));
@@ -378,6 +344,8 @@ function getImgWidth(number) {
       return 274;
     case 8:
       return 472;
+    case 9:
+      return 1920;
   }
 }
 
@@ -401,6 +369,8 @@ function getImgHeight(number) {
       return 326;
     case 8:
       return 488;
+    case 9:
+      return 1080;
   }
 }
 
@@ -508,11 +478,7 @@ function HSVtoRGB(h, s, v) {
 function main() {
   // main is called immediately when the function begins
   // Write all initialization functions here //
-
-  window.addEventListener("load", function () {
-    //console.log("starting");
-    update();
-  });
+  update();
 }
 
 //
