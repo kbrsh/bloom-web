@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bloom - Seismic Visualization</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+
+        #bloomCanvas {
+            display: block;
+            background: #000;
+        }
+
+        #paletteImage {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="bloomCanvas"></canvas>
+
+    <img id="paletteImage" src="palette.jpg" />
+
+    <script src="bloom.js"></script>
+</body>
+</html>
