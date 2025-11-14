@@ -258,6 +258,13 @@ class BloomVisualization {
     }
   }
 
+  // Easing function for flower bloom - ease-out-back with overshoot
+  easeOutBack(t) {
+    const c1 = 1.2;
+    const c3 = c1 + 1;
+    return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+  }
+
   // Animation loop to render all flowers with effects
   render() {
     // Clear canvas with slight trail effect for blur
@@ -269,10 +276,11 @@ class BloomVisualization {
     this.flowers.forEach((flower) => {
       const age = now - flower.createdAt;
 
-      // Zoom effect (600ms + size * 20)
-      const zoomDuration = 600 + flower.size * 20;
+      // Zoom effect (400ms + size * 10) with easing
+      const zoomDuration = 400 + flower.size * 10;
       if (age < zoomDuration) {
-        flower.currentSize = age / zoomDuration;
+        const t = age / zoomDuration;
+        flower.currentSize = this.easeOutBack(t);
       } else {
         flower.currentSize = 1.0;
       }
