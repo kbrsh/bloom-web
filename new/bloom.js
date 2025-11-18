@@ -27,6 +27,7 @@ class BloomVisualization {
     this.paletteCanvas = document.createElement("canvas");
     this.paletteCtx = this.paletteCanvas.getContext("2d");
     this.paletteReady = false;
+    this.highlightColors = []; // Small set of prominent/interesting colors to mix in
 
     // Animation timer
     this.animationTimer = null;
@@ -67,18 +68,79 @@ class BloomVisualization {
       this.paletteCanvas.width = img.width;
       this.paletteCanvas.height = img.height;
       this.paletteCtx.drawImage(img, 0, 0);
+      this.extractHighlights();
       this.paletteReady = true;
     } else if (img) {
       img.onload = () => {
         this.paletteCanvas.width = img.width;
         this.paletteCanvas.height = img.height;
         this.paletteCtx.drawImage(img, 0, 0);
+        this.extractHighlights();
         this.paletteReady = true;
       };
     }
   }
 
+  // Extract a small set of highlight/accent colors that might be underrepresented
+  extractHighlights() {
+    const width = this.paletteCanvas.width;
+    const height = this.paletteCanvas.height;
+
+    const candidates = [];
+
+    // Sample the image to find interesting colors
+    const sampleStep = 5;
+    for (let y = 0; y < height; y += sampleStep) {
+      for (let x = 0; x < width; x += sampleStep) {
+        const imageData = this.paletteCtx.getImageData(x, y, 1, 1);
+        const [r, g, b, a] = imageData.data;
+
+        if (a < 128) continue;
+
+        const { h, s, l } = this.rgbToHsl(r, g, b);
+
+        // Only keep highly saturated or bright colors (the "interesting" ones)
+        if (s > 0.5 || (l > 0.6 && s > 0.3)) {
+          candidates.push({
+            h, s, l,
+            score: s * 2 + l,
+          });
+        }
+      }
+    }
+
+    // Sort by score and pick diverse highlights
+    candidates.sort((a, b) => b.score - a.score);
+
+    const selected = [];
+    const minDistance = 0.2;
+
+    for (const c of candidates) {
+      const isDifferent = selected.every((sel) => {
+        const hDist = Math.min(Math.abs(c.h - sel.h), 1 - Math.abs(c.h - sel.h));
+        const dist = Math.sqrt(hDist * hDist * 4 + (c.s - sel.s) ** 2 + (c.l - sel.l) ** 2);
+        return dist > minDistance;
+      });
+
+      if (isDifferent) {
+        const minSat = 0.4;
+        const boostedS = Math.max(c.s, minSat);
+        const { r, g, b } = this.hslToRgb(c.h, boostedS, c.l);
+        selected.push({
+          h: c.h, s: boostedS, l: c.l,
+          color: `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`,
+        });
+
+        if (selected.length >= 15) break;
+      }
+    }
+
+    this.highlightColors = selected.map((c) => c.color);
+    console.log(`Extracted ${this.highlightColors.length} highlight colors:`, this.highlightColors);
+  }
+
   // Section 3.0.21: Get color from palette using two random parameters
+  // Random sampling for proportional representation, with occasional highlights mixed in
   getColor(c, d) {
     if (!this.paletteReady) {
       // Fallback colors if palette not ready
@@ -86,22 +148,23 @@ class BloomVisualization {
       return colors[Math.floor(Math.random() * colors.length)];
     }
 
+    // 20% chance to use a highlight color (ensures accents appear)
+    if (this.highlightColors.length > 0 && Math.random() < 0.2) {
+      return this.highlightColors[Math.floor(Math.random() * this.highlightColors.length)];
+    }
+
+    // Otherwise, sample randomly from palette image (proportional representation)
     const x = Math.floor(c * this.paletteCanvas.width);
     const y = Math.floor(d * this.paletteCanvas.height);
     const imageData = this.paletteCtx.getImageData(x, y, 1, 1);
     const [r, g, b] = imageData.data;
 
-    // --- Vibrancy correction: ensure no dull/gray tones ---
+    // Apply saturation boost
     const { h, s, l } = this.rgbToHsl(r, g, b);
-
-    // Enforce minimum saturation & brightness
-    const minSat = 0.35; // 0–1 range
-    // const minLight = 0.35;
+    const minSat = 0.35;
     const sat = Math.max(s, minSat);
-    // const light = Math.max(l, minLight);
-    const light = l;
 
-    const { r: nr, g: ng, b: nb } = this.hslToRgb(h, sat, light);
+    const { r: nr, g: ng, b: nb } = this.hslToRgb(h, sat, l);
     return `rgb(${Math.round(nr)}, ${Math.round(ng)}, ${Math.round(nb)})`;
   }
 
@@ -277,7 +340,7 @@ class BloomVisualization {
       const age = now - flower.createdAt;
 
       // Zoom effect (400ms + size * 10) with easing
-      const zoomDuration = 400 + flower.size * 10;
+      const zoomDuration = 280 + flower.size * 7; // 30% faster
       if (age < zoomDuration) {
         const t = age / zoomDuration;
         flower.currentSize = this.easeOutBack(t);
@@ -316,12 +379,17 @@ class BloomVisualization {
       // Draw circles from smallest to largest (so largest is on bottom)
       for (let i = 0; i < flower.circles.length; i++) {
         const circle = flower.circles[i];
+        const radius = circle.radius * flower.currentSize;
+
+        // Skip if radius is invalid
+        if (radius <= 0 || !isFinite(radius)) continue;
+
         this.ctx.fillStyle = circle.color;
         this.ctx.beginPath();
         this.ctx.arc(
           flower.x,
           flower.y,
-          circle.radius * flower.currentSize,
+          radius,
           0,
           Math.PI * 2,
         );
