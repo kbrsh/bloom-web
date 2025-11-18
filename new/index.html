@@ -24,13 +24,49 @@
         #paletteImage {
             display: none;
         }
+
+        #paletteSelect {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 5px;
+            font-size: 14px;
+        }
+
+        #palettePreview {
+            display: none;
+            position: absolute;
+            top: 40px;
+            right: 10px;
+            width: 150px;
+            border: 2px solid white;
+        }
+
+        #paletteSelect:hover + #palettePreview,
+        #palettePreview:hover {
+            display: block;
+        }
     </style>
 </head>
 <body>
     <canvas id="bloomCanvas"></canvas>
 
+    <select id="paletteSelect">
+        <option value="palette1.jpg">Palette 1</option>
+        <option value="palette2.jpg" selected>Palette 2</option>
+        <option value="palette3.jpg">Palette 3</option>
+    </select>
+    <img id="palettePreview" src="palette2.jpg" />
+
     <img id="paletteImage" src="palette2.jpg" />
 
     <script src="bloom.js"></script>
+    <script>
+        document.getElementById('paletteSelect').onchange = function() {
+            document.getElementById('paletteImage').src = this.value;
+            document.getElementById('palettePreview').src = this.value;
+            bloom.preparePalette('paletteImage');
+        };
+    </script>
 </body>
 </html>
