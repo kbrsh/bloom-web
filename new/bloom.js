@@ -102,7 +102,9 @@ class BloomVisualization {
         // Only keep highly saturated or bright colors (the "interesting" ones)
         if (s > 0.5 || (l > 0.6 && s > 0.3)) {
           candidates.push({
-            h, s, l,
+            h,
+            s,
+            l,
             score: s * 2 + l,
           });
         }
@@ -117,8 +119,13 @@ class BloomVisualization {
 
     for (const c of candidates) {
       const isDifferent = selected.every((sel) => {
-        const hDist = Math.min(Math.abs(c.h - sel.h), 1 - Math.abs(c.h - sel.h));
-        const dist = Math.sqrt(hDist * hDist * 4 + (c.s - sel.s) ** 2 + (c.l - sel.l) ** 2);
+        const hDist = Math.min(
+          Math.abs(c.h - sel.h),
+          1 - Math.abs(c.h - sel.h),
+        );
+        const dist = Math.sqrt(
+          hDist * hDist * 4 + (c.s - sel.s) ** 2 + (c.l - sel.l) ** 2,
+        );
         return dist > minDistance;
       });
 
@@ -127,7 +134,9 @@ class BloomVisualization {
         const boostedS = Math.max(c.s, minSat);
         const { r, g, b } = this.hslToRgb(c.h, boostedS, c.l);
         selected.push({
-          h: c.h, s: boostedS, l: c.l,
+          h: c.h,
+          s: boostedS,
+          l: c.l,
           color: `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`,
         });
 
@@ -136,7 +145,10 @@ class BloomVisualization {
     }
 
     this.highlightColors = selected.map((c) => c.color);
-    console.log(`Extracted ${this.highlightColors.length} highlight colors:`, this.highlightColors);
+    console.log(
+      `Extracted ${this.highlightColors.length} highlight colors:`,
+      this.highlightColors,
+    );
   }
 
   // Section 3.0.21: Get color from palette using two random parameters
@@ -150,7 +162,9 @@ class BloomVisualization {
 
     // 20% chance to use a highlight color (ensures accents appear)
     if (this.highlightColors.length > 0 && Math.random() < 0.2) {
-      return this.highlightColors[Math.floor(Math.random() * this.highlightColors.length)];
+      return this.highlightColors[
+        Math.floor(Math.random() * this.highlightColors.length)
+      ];
     }
 
     // Otherwise, sample randomly from palette image (proportional representation)
@@ -233,7 +247,8 @@ class BloomVisualization {
 
       // Calculate position
       let fX = (5 * (this.flowerIndex + 100)) % this.canvas.width;
-      let fY = this.canvas.height / 2 + secondDeriv * (avg * 10); // Amplitude influence (original Flash used *1)
+      let fY = (Math.abs(secondDeriv) * 10) % this.canvas.height;
+      // let fY = this.canvas.height / 2 + secondDeriv * (avg * 10);
 
       // Clamp positions to canvas bounds
       fY = Math.max(100, Math.min(this.canvas.height - 100, fY));
@@ -386,13 +401,7 @@ class BloomVisualization {
 
         this.ctx.fillStyle = circle.color;
         this.ctx.beginPath();
-        this.ctx.arc(
-          flower.x,
-          flower.y,
-          radius,
-          0,
-          Math.PI * 2,
-        );
+        this.ctx.arc(flower.x, flower.y, radius, 0, Math.PI * 2);
         this.ctx.fill();
       }
 
@@ -492,54 +501,46 @@ class BloomVisualization {
   }
 }
 
-// Dummy data generator for testing
-// Replace this with real seismic API call later
-class SeismicDataGenerator {
-  constructor() {
-    this.time = 0;
-    this.baseFreq = 0.02;
-    this.noiseLevel = 5;
+// Seismic data fetching from NCEDC
+const net = ["BK", "BP"];
+const sta = ["BKS"];
+const loc = "00";
+const cha = ["BHE", "BHN", "BHZ"];
+const interval = 10000;
+let lastTime = Date.now() - interval;
+
+function formatTime(timestamp) {
+  const pad = (num) => String(num).padStart(2, "0");
+  const date = new Date(timestamp);
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+async function poll(bloom) {
+  const currentTime = Date.now();
+  const url = `https://service.ncedc.org/fdsnws/dataselect/1/query?net=${net.join(",")}&sta=${sta.join(",")}&loc=${loc}&cha=${cha.join(",")}&start=${formatTime(lastTime)}&end=${formatTime(currentTime)}`;
+  lastTime = currentTime;
+
+  try {
+    const response = await fetch(url);
+    const arrayBuffer = await response.arrayBuffer();
+    const dataRecords = miniseed.parseDataRecords(arrayBuffer);
+    const segment = miniseed.createSeismogramSegment(dataRecords);
+    segment.y.forEach((sample) => bloom.addData(sample));
+  } catch (error) {
+    console.error("Error fetching seismic data:", error);
   }
 
-  // Generate realistic seismic-like data
-  generateSample() {
-    this.time++;
-
-    // Combine multiple frequency components
-    const slow = Math.sin(this.time * this.baseFreq) * 10;
-    const medium = Math.sin(this.time * this.baseFreq * 3) * 5;
-    const fast = Math.sin(this.time * this.baseFreq * 7) * 2;
-
-    // Add noise
-    const noise = (Math.random() - 0.5) * this.noiseLevel;
-
-    // Occasional "earthquake" events
-    let event = 0;
-    if (Math.random() < 0.001) {
-      event =
-        Math.sin(this.time * 0.5) * 50 * Math.exp(-(this.time % 100) / 20);
-    }
-
-    return slow + medium + fast + noise + event;
-  }
+  setTimeout(() => poll(bloom), interval);
 }
 
 // Initialize the visualization when page loads
 let bloom;
-let dataGenerator;
 
 window.addEventListener("DOMContentLoaded", () => {
   bloom = new BloomVisualization();
   bloom.init("bloomCanvas", "paletteImage");
-
-  dataGenerator = new SeismicDataGenerator();
-
-  // Feed data to visualization
-  setInterval(() => {
-    const sample = dataGenerator.generateSample();
-    bloom.addData(sample);
-  }, 100); // Add new data every 50ms
-
-  // Start visualization
   bloom.start();
+
+  // Start fetching real seismic data
+  poll(bloom);
 });

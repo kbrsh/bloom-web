@@ -46,6 +46,14 @@
         #palettePreview:hover {
             display: block;
         }
+
+        #customUpload {
+            position: absolute;
+            top: 10px;
+            right: 100px;
+            font-size: 14px;
+            padding: 5px;
+        }
     </style>
 </head>
 <body>
@@ -57,15 +65,33 @@
         <option value="palette3.jpg">Palette 3</option>
     </select>
     <img id="palettePreview" src="palette2.jpg" />
+    <input type="file" id="customUpload" accept="image/*" />
 
     <img id="paletteImage" src="palette2.jpg" />
 
+    <script type="module" src="../js/seisplotjs_3.1.4_standalone.mjs"></script>
+    <script type="module">
+      import { miniseed } from "../js/seisplotjs_3.1.4_standalone.mjs";
+      window.miniseed = miniseed;
+    </script>
     <script src="bloom.js"></script>
     <script>
         document.getElementById('paletteSelect').onchange = function() {
             document.getElementById('paletteImage').src = this.value;
             document.getElementById('palettePreview').src = this.value;
             bloom.preparePalette('paletteImage');
+        };
+
+        document.getElementById('customUpload').onchange = function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    document.getElementById('paletteImage').src = event.target.result;
+                    bloom.preparePalette('paletteImage');
+                };
+                reader.readAsDataURL(file);
+            }
         };
     </script>
 </body>
