@@ -12,7 +12,7 @@ class BloomVisualization {
     this.zoomDuration = 600; // Zoom effect duration
     this.bloomScale = 100; // TunableParameters.BLOOM_SCALE from original (default 100)
     this.clampPadding = 150;
-    this.showClampBox = false;
+    this.showClampBox = true;
 
     // Data structures
     this.samplesBuffer = new Array(this.maxBufferSize);
@@ -271,13 +271,19 @@ class BloomVisualization {
       // let fY = this.canvas.height / 2 + secondDeriv * (avg * 10);
 
       // Clamp positions to canvas bounds
-      fY = Math.max(
+      fY = this.remap(
+        fY,
+        0,
+        this.canvasCssHeight,
         this.clampPadding,
-        Math.min(this.canvasCssHeight - this.clampPadding, fY),
+        this.canvasCssHeight - this.clampPadding,
       );
-      fX = Math.max(
+      fX = this.remap(
+        fX,
+        0,
+        this.canvasCssWidth,
         this.clampPadding,
-        Math.min(this.canvasCssWidth - this.clampPadding, fX),
+        this.canvasCssWidth - this.clampPadding,
       );
       size = Math.max(10, Math.min(375, size));
 
@@ -450,12 +456,7 @@ class BloomVisualization {
 
   // Animation loop to render all flowers with effects
   render() {
-    this.renderScene(
-      this.ctx,
-      this.canvasCssWidth,
-      this.canvasCssHeight,
-      true,
-    );
+    this.renderScene(this.ctx, this.canvasCssWidth, this.canvasCssHeight, true);
   }
 
   captureSnapshot(scale = 2) {
@@ -484,6 +485,12 @@ class BloomVisualization {
       const maxAge = 25000 + flower.size * 20; // Fade duration + size-dependent delay
       return now - flower.createdAt < maxAge;
     });
+  }
+
+  remap(value, inMin, inMax, outMin, outMax) {
+    if (inMax === inMin) return outMin;
+    const t = (value - inMin) / (inMax - inMin);
+    return outMin + t * (outMax - outMin);
   }
 
   // Start the animation
