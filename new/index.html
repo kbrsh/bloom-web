@@ -25,48 +25,54 @@
             display: none;
         }
 
-        #paletteSelect {
+        #paletteBox {
             position: absolute;
             top: 10px;
             right: 10px;
-            padding: 5px;
-            font-size: 14px;
-        }
-
-        #palettePreview {
             display: none;
-            position: absolute;
-            top: 40px;
-            right: 10px;
-            width: 150px;
-            border: 2px solid white;
+            background: rgba(255, 255, 255, 0.85);
+            border: 1px solid rgba(0, 0, 0, 0.15);
+            border-radius: 6px;
+            padding: 8px;
+            color: #000;
+            font-size: 12px;
         }
 
-        #paletteSelect:hover + #palettePreview,
-        #palettePreview:hover {
+        #paletteBox.is-open {
             display: block;
         }
 
         #customUpload {
-            position: absolute;
-            top: 10px;
-            right: 100px;
-            font-size: 14px;
-            padding: 5px;
+            font-size: 12px;
+        }
+
+        #palettePreview {
+            display: block;
+            margin-top: 8px;
+            width: 150px;
+            border: 1px solid rgba(0, 0, 0, 0.2);
+        }
+
+        #snapshotButton {
+            margin-top: 8px;
+            width: 100%;
+            font-size: 12px;
+            padding: 6px 8px;
+            background: #fff;
+            border: 1px solid rgba(0, 0, 0, 0.25);
+            border-radius: 4px;
+            cursor: pointer;
         }
     </style>
 </head>
 <body>
     <canvas id="bloomCanvas"></canvas>
 
-    <select id="paletteSelect">
-        <option value="palette1.jpg">Palette 1</option>
-        <option value="palette2.jpg" selected>Palette 2</option>
-        <option value="palette3.jpg">Palette 3</option>
-    </select>
-    <img id="palettePreview" src="palette2.jpg" />
-    <input type="file" id="customUpload" accept="image/*" />
-
+    <div id="paletteBox">
+        <input type="file" id="customUpload" accept="image/*" />
+        <img id="palettePreview" src="palette2.jpg" alt="Palette preview" />
+        <button id="snapshotButton" type="button">Capture snapshot</button>
+    </div>
     <img id="paletteImage" src="palette2.jpg" />
 
     <script type="module" src="../js/seisplotjs_3.1.4_standalone.mjs"></script>
@@ -76,23 +82,28 @@
     </script>
     <script src="bloom.js"></script>
     <script>
-        document.getElementById('paletteSelect').onchange = function() {
-            document.getElementById('paletteImage').src = this.value;
-            document.getElementById('palettePreview').src = this.value;
-            bloom.preparePalette('paletteImage');
-        };
-
         document.getElementById('customUpload').onchange = function(e) {
             const file = e.target.files[0];
             if (file) {
                 const reader = new FileReader();
                 reader.onload = (event) => {
                     document.getElementById('paletteImage').src = event.target.result;
+                    document.getElementById('palettePreview').src = event.target.result;
                     bloom.preparePalette('paletteImage');
                 };
                 reader.readAsDataURL(file);
             }
         };
+
+        document.getElementById('snapshotButton').onclick = function() {
+              bloom.captureSnapshot(2);
+        };
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key.toLowerCase() === 'f') {
+                document.getElementById('paletteBox').classList.toggle('is-open');
+            }
+        });
     </script>
 </body>
 </html>

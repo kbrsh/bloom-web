@@ -279,13 +279,13 @@ class BloomVisualization {
         this.clampPadding,
         Math.min(this.canvasCssWidth - this.clampPadding, fX),
       );
-      size = Math.max(4, Math.min(375, size));
+      size = Math.max(10, Math.min(375, size));
 
       // Draw flower if size is significant
       if (this.lastBreak === 0) {
         this.drawFlower(fX, fY, 20);
       } else {
-        if (size > 4) {
+        if (size > 10) {
           this.drawFlower(fX, fY, size);
         }
       }
@@ -369,26 +369,25 @@ class BloomVisualization {
     return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
   }
 
-  // Animation loop to render all flowers with effects
-  render() {
+  renderScene(ctx, width, height, includeClampBox) {
     // Clear canvas with slight trail effect for blur
-    this.ctx.fillStyle = "rgba(255, 255, 255, 1)";
-    this.ctx.fillRect(0, 0, this.canvasCssWidth, this.canvasCssHeight);
+    ctx.fillStyle = "rgba(255, 255, 255, 1)";
+    ctx.fillRect(0, 0, width, height);
 
     const now = Date.now();
 
-    if (this.showClampBox) {
-      this.ctx.save();
-      this.ctx.strokeStyle = "rgba(0, 0, 0, 0.35)";
-      this.ctx.setLineDash([6, 6]);
-      this.ctx.lineWidth = 1;
-      this.ctx.strokeRect(
+    if (this.showClampBox && includeClampBox) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(0, 0, 0, 0.35)";
+      ctx.setLineDash([6, 6]);
+      ctx.lineWidth = 1;
+      ctx.strokeRect(
         this.clampPadding,
         this.clampPadding,
-        this.canvasCssWidth - this.clampPadding * 2,
-        this.canvasCssHeight - this.clampPadding * 2,
+        width - this.clampPadding * 2,
+        height - this.clampPadding * 2,
       );
-      this.ctx.restore();
+      ctx.restore();
     }
 
     this.flowers.forEach((flower) => {
@@ -422,14 +421,14 @@ class BloomVisualization {
       }
 
       // Draw the flower
-      this.ctx.save();
+      ctx.save();
 
       // Apply blur if needed
       if (flower.blur > 0) {
-        this.ctx.filter = `blur(${flower.blur}px)`;
+        ctx.filter = `blur(${flower.blur}px)`;
       }
 
-      this.ctx.globalAlpha = flower.opacity;
+      ctx.globalAlpha = flower.opacity;
 
       // Draw circles from smallest to largest (so largest is on bottom)
       for (let i = 0; i < flower.circles.length; i++) {
@@ -439,14 +438,42 @@ class BloomVisualization {
         // Skip if radius is invalid
         if (radius <= 0 || !isFinite(radius)) continue;
 
-        this.ctx.fillStyle = circle.color;
-        this.ctx.beginPath();
-        this.ctx.arc(flower.x, flower.y, radius, 0, Math.PI * 2);
-        this.ctx.fill();
+        ctx.fillStyle = circle.color;
+        ctx.beginPath();
+        ctx.arc(flower.x, flower.y, radius, 0, Math.PI * 2);
+        ctx.fill();
       }
 
-      this.ctx.restore();
+      ctx.restore();
     });
+  }
+
+  // Animation loop to render all flowers with effects
+  render() {
+    this.renderScene(
+      this.ctx,
+      this.canvasCssWidth,
+      this.canvasCssHeight,
+      true,
+    );
+  }
+
+  captureSnapshot(scale = 2) {
+    const width = this.canvasCssWidth;
+    const height = this.canvasCssHeight;
+
+    const captureCanvas = document.createElement("canvas");
+    captureCanvas.width = Math.floor(width * scale);
+    captureCanvas.height = Math.floor(height * scale);
+    const captureCtx = captureCanvas.getContext("2d");
+    captureCtx.scale(scale, scale);
+
+    this.renderScene(captureCtx, width, height, false);
+
+    const link = document.createElement("a");
+    link.href = captureCanvas.toDataURL("image/png");
+    link.download = `bloom-snapshot-${Date.now()}.png`;
+    link.click();
   }
 
   removeOldFlowers() {
