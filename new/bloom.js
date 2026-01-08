@@ -11,6 +11,8 @@ class BloomVisualization {
     this.regularStripe = 30; // Regular stripe width
     this.zoomDuration = 600; // Zoom effect duration
     this.bloomScale = 100; // TunableParameters.BLOOM_SCALE from original (default 100)
+    this.clampPadding = 150;
+    this.showClampBox = false;
 
     // Data structures
     this.samplesBuffer = new Array(this.maxBufferSize);
@@ -42,26 +44,42 @@ class BloomVisualization {
     this.canvas = document.getElementById(canvasId);
     this.ctx = this.canvas.getContext("2d");
 
-    // Set canvas size to window
-    this.canvas.width = window.innerWidth;
-    this.canvas.height = window.innerHeight;
+    // Set canvas size to window with high-DPI backing store
+    this.resizeCanvas();
 
     // Prepare palette for color extraction
     this.preparePalette(paletteImageId);
 
     // Handle window resize
     window.addEventListener("resize", () => {
-      this.canvas.width = window.innerWidth;
-      this.canvas.height = window.innerHeight;
-      this.thinStripe = (1 / 100) * this.canvas.height;
-      this.regularStripe = 2 * this.thinStripe;
+      this.resizeCanvas();
     });
 
     // Initialize stripe sizes based on canvas height
-    this.thinStripe = (1 / 100) * this.canvas.height;
+    this.thinStripe = (1 / 100) * this.canvasCssHeight;
     this.regularStripe = 2 * this.thinStripe;
   }
 
+  resizeCanvas() {
+    const ratio = window.devicePixelRatio || 1;
+    this.pixelRatio = ratio;
+
+    const cssWidth = window.innerWidth;
+    const cssHeight = window.innerHeight;
+    this.canvasCssWidth = cssWidth;
+    this.canvasCssHeight = cssHeight;
+
+    this.canvas.style.width = `${cssWidth}px`;
+    this.canvas.style.height = `${cssHeight}px`;
+    this.canvas.width = Math.floor(cssWidth * ratio);
+    this.canvas.height = Math.floor(cssHeight * ratio);
+
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.ctx.scale(ratio, ratio);
+
+    this.thinStripe = (1 / 100) * cssHeight;
+    this.regularStripe = 2 * this.thinStripe;
+  }
   preparePalette(imageId) {
     const img = document.getElementById(imageId);
     if (img && img.complete) {
@@ -245,14 +263,22 @@ class BloomVisualization {
       // Calculate size (from documentation formula)
       let size = relativeHeight * 65.0 * (this.bloomScale / 100);
 
-      // Calculate position
-      let fX = (5 * (this.flowerIndex + 100)) % this.canvas.width;
-      let fY = (Math.abs(secondDeriv) * 10) % this.canvas.height;
+      // Calculate position (bottom-to-top sweep)
+      let fY =
+        this.canvasCssHeight -
+        ((5 * (this.flowerIndex + 100)) % this.canvasCssHeight);
+      let fX = (Math.abs(secondDeriv) * 10) % this.canvasCssWidth;
       // let fY = this.canvas.height / 2 + secondDeriv * (avg * 10);
 
       // Clamp positions to canvas bounds
-      fY = Math.max(100, Math.min(this.canvas.height - 100, fY));
-      fX = Math.max(100, Math.min(this.canvas.width - 100, fX));
+      fY = Math.max(
+        this.clampPadding,
+        Math.min(this.canvasCssHeight - this.clampPadding, fY),
+      );
+      fX = Math.max(
+        this.clampPadding,
+        Math.min(this.canvasCssWidth - this.clampPadding, fX),
+      );
       size = Math.max(4, Math.min(375, size));
 
       // Draw flower if size is significant
@@ -276,7 +302,7 @@ class BloomVisualization {
   // Section 3.0.20: Draw flower with concentric circles
   drawFlower(x, y, size) {
     // Recalculate stripe widths based on canvas size (from original documentation)
-    const thinStripe = (1 / 100) * this.canvas.height;
+    const thinStripe = (1 / 100) * this.canvasCssHeight;
     const regularStripe = 2 * thinStripe;
 
     // Calculate number of stripes based on size
@@ -347,9 +373,23 @@ class BloomVisualization {
   render() {
     // Clear canvas with slight trail effect for blur
     this.ctx.fillStyle = "rgba(255, 255, 255, 1)";
-    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    this.ctx.fillRect(0, 0, this.canvasCssWidth, this.canvasCssHeight);
 
     const now = Date.now();
+
+    if (this.showClampBox) {
+      this.ctx.save();
+      this.ctx.strokeStyle = "rgba(0, 0, 0, 0.35)";
+      this.ctx.setLineDash([6, 6]);
+      this.ctx.lineWidth = 1;
+      this.ctx.strokeRect(
+        this.clampPadding,
+        this.clampPadding,
+        this.canvasCssWidth - this.clampPadding * 2,
+        this.canvasCssHeight - this.clampPadding * 2,
+      );
+      this.ctx.restore();
+    }
 
     this.flowers.forEach((flower) => {
       const age = now - flower.createdAt;
