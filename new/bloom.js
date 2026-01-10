@@ -10,8 +10,7 @@ class BloomVisualization {
     this.thinStripe = 10; // Thin stripe width
     this.regularStripe = 30; // Regular stripe width
     this.zoomDuration = 600; // Zoom effect duration
-    this.bloomScale = 200; // TunableParameters.BLOOM_SCALE from original (default 100)
-    this.clampPadding = 150;
+    this.clampPaddingRatio = 0.12;
     this.showClampBox = false;
     this.useSyntheticData = false;
 
@@ -263,40 +262,52 @@ class BloomVisualization {
         2 * this.value(this.samplesBuffer, this.flowerIndex - 1) +
         this.value(this.samplesBuffer, this.flowerIndex);
 
-      // Calculate size (from documentation formula)
-      let size = relativeHeight * 65.0 * (this.bloomScale / 100);
+      // Calculate size based on viewport min dimension
+      const minDim = Math.min(this.canvasCssWidth, this.canvasCssHeight);
+      let size = relativeHeight * (minDim * 0.15);
 
       // Calculate position (bottom-to-top sweep)
       let fY =
         this.canvasCssHeight -
         ((5 * (this.flowerIndex + 100)) % this.canvasCssHeight);
-      let fX = (Math.abs(secondDeriv) * 10) % this.canvasCssWidth;
-      // let fY = this.canvas.height / 2 + secondDeriv * (avg * 10);
+      const secondDerivScale = 200;
+      const normSecondDeriv = Math.max(
+        -1,
+        Math.min(1, secondDeriv / secondDerivScale),
+      );
+
+      const clampPadding = Math.round(
+        Math.min(this.canvasCssWidth, this.canvasCssHeight) *
+          this.clampPaddingRatio,
+      );
+      const centerX = this.canvasCssWidth / 2;
+      const maxOffset = centerX - clampPadding;
+      let fX = centerX + normSecondDeriv * maxOffset;
 
       // Clamp positions to canvas bounds
       fY = this.remap(
         fY,
         0,
         this.canvasCssHeight,
-        this.clampPadding,
-        this.canvasCssHeight - this.clampPadding,
+        clampPadding,
+        this.canvasCssHeight - clampPadding,
       );
       fX = this.remap(
         fX,
         0,
         this.canvasCssWidth,
-        this.clampPadding,
-        this.canvasCssWidth - this.clampPadding,
+        clampPadding,
+        this.canvasCssWidth - clampPadding,
       );
-      size = Math.max(20, Math.min(450, size));
+      const minSize = minDim * 0.03;
+      const maxSize = minDim * 0.5;
+      size = Math.max(minSize, Math.min(maxSize, size));
 
       // Draw flower if size is significant
       if (this.lastBreak === 0) {
-        this.drawFlower(fX, fY, 20);
-      } else {
-        if (size > 20) {
-          this.drawFlower(fX, fY, size);
-        }
+        this.drawFlower(fX, fY, minSize);
+      } else if (size > minSize) {
+        this.drawFlower(fX, fY, size);
       }
 
       this.lastBreak = this.flowerIndex;
@@ -390,11 +401,14 @@ class BloomVisualization {
       ctx.strokeStyle = "rgba(0, 0, 0, 0.35)";
       ctx.setLineDash([6, 6]);
       ctx.lineWidth = 1;
+      const clampPadding = Math.round(
+        Math.min(width, height) * this.clampPaddingRatio,
+      );
       ctx.strokeRect(
-        this.clampPadding,
-        this.clampPadding,
-        width - this.clampPadding * 2,
-        height - this.clampPadding * 2,
+        clampPadding,
+        clampPadding,
+        width - clampPadding * 2,
+        height - clampPadding * 2,
       );
       ctx.restore();
     }
@@ -661,8 +675,7 @@ function generateSyntheticSamples(count) {
     }
 
     const noise = randn() * (syntheticState.std * 0.15);
-    samples[i] =
-      syntheticState.mean + syntheticState.value + noise + spike;
+    samples[i] = syntheticState.mean + syntheticState.value + noise + spike;
   }
   return samples;
 }
