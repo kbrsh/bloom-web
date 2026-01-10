@@ -12,7 +12,7 @@ class BloomVisualization {
     this.zoomDuration = 600; // Zoom effect duration
     this.bloomScale = 100; // TunableParameters.BLOOM_SCALE from original (default 100)
     this.clampPadding = 150;
-    this.showClampBox = true;
+    this.showClampBox = false;
 
     // Data structures
     this.samplesBuffer = new Array(this.maxBufferSize);
