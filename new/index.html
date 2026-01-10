@@ -46,6 +46,19 @@
             font-size: 12px;
         }
 
+        .menuOption {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 6px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .menuOption input {
+            margin: 0;
+        }
+
         #palettePreview {
             display: block;
             margin-top: 8px;
@@ -70,6 +83,14 @@
 
     <div id="paletteBox">
         <input type="file" id="customUpload" accept="image/*" />
+        <label class="menuOption">
+            <input type="checkbox" id="useSyntheticToggle" />
+            Use synthetic data
+        </label>
+        <label class="menuOption">
+            <input type="checkbox" id="clampToggle" />
+            Show clamp padding
+        </label>
         <img id="palettePreview" src="palette4.jpg" alt="Palette preview" />
         <button id="snapshotButton" type="button">Capture snapshot</button>
     </div>
@@ -98,6 +119,22 @@
         document.getElementById('snapshotButton').onclick = function() {
               bloom.captureSnapshot(2);
         };
+
+        const syntheticToggle = document.getElementById('useSyntheticToggle');
+        const clampToggle = document.getElementById('clampToggle');
+
+        syntheticToggle.onchange = function() {
+              bloom.useSyntheticData = syntheticToggle.checked;
+        };
+
+        clampToggle.onchange = function() {
+              bloom.showClampBox = clampToggle.checked;
+        };
+
+        window.addEventListener('DOMContentLoaded', () => {
+              bloom.useSyntheticData = syntheticToggle.checked;
+              bloom.showClampBox = clampToggle.checked;
+        });
 
         document.addEventListener('keydown', (e) => {
             if (e.key.toLowerCase() === 'f') {

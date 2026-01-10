@@ -10,9 +10,10 @@ class BloomVisualization {
     this.thinStripe = 10; // Thin stripe width
     this.regularStripe = 30; // Regular stripe width
     this.zoomDuration = 600; // Zoom effect duration
-    this.bloomScale = 100; // TunableParameters.BLOOM_SCALE from original (default 100)
+    this.bloomScale = 200; // TunableParameters.BLOOM_SCALE from original (default 100)
     this.clampPadding = 150;
     this.showClampBox = false;
+    this.useSyntheticData = false;
 
     // Data structures
     this.samplesBuffer = new Array(this.maxBufferSize);
@@ -194,9 +195,11 @@ class BloomVisualization {
     // Apply saturation boost
     const { h, s, l } = this.rgbToHsl(r, g, b);
     const minSat = 0.35;
+    const maxLight = 0.9;
     const sat = Math.max(s, minSat);
+    const light = Math.min(l, maxLight);
 
-    const { r: nr, g: ng, b: nb } = this.hslToRgb(h, sat, l);
+    const { r: nr, g: ng, b: nb } = this.hslToRgb(h, sat, light);
     return `rgb(${Math.round(nr)}, ${Math.round(ng)}, ${Math.round(nb)})`;
   }
 
@@ -285,13 +288,13 @@ class BloomVisualization {
         this.clampPadding,
         this.canvasCssWidth - this.clampPadding,
       );
-      size = Math.max(10, Math.min(375, size));
+      size = Math.max(20, Math.min(450, size));
 
       // Draw flower if size is significant
       if (this.lastBreak === 0) {
         this.drawFlower(fX, fY, 20);
       } else {
-        if (size > 10) {
+        if (size > 20) {
           this.drawFlower(fX, fY, size);
         }
       }
@@ -582,6 +585,8 @@ const loc = "00";
 const cha = ["BHE", "BHN", "BHZ"];
 const interval = 10000;
 let lastTime = Date.now() - interval;
+const syntheticSampleRate = 50;
+const syntheticState = { value: 0, velocity: 0, spike: 0, mean: 0, std: 3000 };
 
 function formatTime(timestamp) {
   const pad = (num) => String(num).padStart(2, "0");
@@ -591,20 +596,83 @@ function formatTime(timestamp) {
 
 async function poll(bloom) {
   const currentTime = Date.now();
+  if (bloom.useSyntheticData) {
+    lastTime = currentTime;
+    feedSyntheticSamples(bloom);
+    setTimeout(() => poll(bloom), interval);
+    return;
+  }
+
   const url = `https://service.ncedc.org/fdsnws/dataselect/1/query?net=${net.join(",")}&sta=${sta.join(",")}&loc=${loc}&cha=${cha.join(",")}&start=${formatTime(lastTime)}&end=${formatTime(currentTime)}`;
   lastTime = currentTime;
 
   try {
     const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
     const arrayBuffer = await response.arrayBuffer();
     const dataRecords = miniseed.parseDataRecords(arrayBuffer);
     const segment = miniseed.createSeismogramSegment(dataRecords);
     segment.y.forEach((sample) => bloom.addData(sample));
   } catch (error) {
     console.error("Error fetching seismic data:", error);
+    feedSyntheticSamples(bloom);
   }
 
   setTimeout(() => poll(bloom), interval);
+}
+
+function feedSyntheticSamples(bloom) {
+  const sampleCount = Math.max(
+    1,
+    Math.round((interval / 1000) * syntheticSampleRate),
+  );
+  const synthetic = generateSyntheticSamples(sampleCount);
+  synthetic.forEach((sample) => bloom.addData(sample));
+}
+
+function generateSyntheticSamples(count) {
+  if (syntheticState.mean === 0) {
+    syntheticState.mean = 1500 + Math.random() * 1000;
+    syntheticState.std = 2500 + Math.random() * 1800;
+  }
+
+  const samples = new Array(count);
+  for (let i = 0; i < count; i += 1) {
+    // Low-frequency drift with gentle damping.
+    syntheticState.velocity += randn() * (syntheticState.std * 0.02);
+    syntheticState.velocity *= 0.92;
+    syntheticState.value += syntheticState.velocity;
+    syntheticState.value *= 0.95;
+
+    // Occasional spikes to mimic events.
+    if (syntheticState.spike <= 0 && Math.random() < 0.008) {
+      syntheticState.spike =
+        randn() * (syntheticState.std * (1.5 + Math.random() * 1.5));
+    }
+    let spike = 0;
+    if (syntheticState.spike > 0) {
+      spike = syntheticState.spike;
+      syntheticState.spike *= 0.7;
+      if (Math.abs(syntheticState.spike) < 1) {
+        syntheticState.spike = 0;
+      }
+    }
+
+    const noise = randn() * (syntheticState.std * 0.15);
+    samples[i] =
+      syntheticState.mean + syntheticState.value + noise + spike;
+  }
+  return samples;
+}
+
+function randn() {
+  let u = 0;
+  let v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
 }
 
 // Initialize the visualization when page loads
