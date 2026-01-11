@@ -347,6 +347,8 @@ class BloomVisualization {
       currentSize: 0,
       targetSize: 1.0,
       blur: 0,
+      cacheCanvas: null,
+      cacheSize: 0,
     };
 
     // Build circles with colors
@@ -380,6 +382,34 @@ class BloomVisualization {
     if (this.flowers.length > this.maxNumFlowers) {
       this.flowers.shift();
     }
+
+    this.buildFlowerCache(flower);
+  }
+
+  buildFlowerCache(flower) {
+    const padding = 12; // Extra room for blur edges.
+    const cacheSize = Math.ceil(flower.size * 2 + padding * 2);
+    const ratio = this.pixelRatio || 1;
+    const cacheCanvas = document.createElement("canvas");
+    cacheCanvas.width = Math.ceil(cacheSize * ratio);
+    cacheCanvas.height = Math.ceil(cacheSize * ratio);
+    const cacheCtx = cacheCanvas.getContext("2d");
+    cacheCtx.scale(ratio, ratio);
+
+    const center = cacheSize / 2;
+    for (let i = 0; i < flower.circles.length; i++) {
+      const circle = flower.circles[i];
+      const radius = circle.radius;
+      if (radius <= 0 || !isFinite(radius)) continue;
+
+      cacheCtx.fillStyle = circle.color;
+      cacheCtx.beginPath();
+      cacheCtx.arc(center, center, radius, 0, Math.PI * 2);
+      cacheCtx.fill();
+    }
+
+    flower.cacheCanvas = cacheCanvas;
+    flower.cacheSize = cacheSize;
   }
 
   // Easing function for flower bloom - ease-out-back with overshoot
@@ -453,18 +483,12 @@ class BloomVisualization {
 
       ctx.globalAlpha = flower.opacity;
 
-      // Draw circles from smallest to largest (so largest is on bottom)
-      for (let i = 0; i < flower.circles.length; i++) {
-        const circle = flower.circles[i];
-        const radius = circle.radius * flower.currentSize;
-
-        // Skip if radius is invalid
-        if (radius <= 0 || !isFinite(radius)) continue;
-
-        ctx.fillStyle = circle.color;
-        ctx.beginPath();
-        ctx.arc(flower.x, flower.y, radius, 0, Math.PI * 2);
-        ctx.fill();
+      // Draw cached flower bitmap scaled to current size
+      if (flower.cacheCanvas && flower.cacheSize > 0) {
+        const drawSize = flower.cacheSize * flower.currentSize;
+        const drawX = flower.x - drawSize / 2;
+        const drawY = flower.y - drawSize / 2;
+        ctx.drawImage(flower.cacheCanvas, drawX, drawY, drawSize, drawSize);
       }
 
       ctx.restore();
