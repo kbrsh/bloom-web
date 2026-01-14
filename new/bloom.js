@@ -194,9 +194,8 @@ class BloomVisualization {
     // Apply saturation boost
     const { h, s, l } = this.rgbToHsl(r, g, b);
     const minSat = 0.35;
-    const maxLight = 0.9;
     const sat = Math.max(s, minSat);
-    const light = Math.min(l, maxLight);
+    const light = l;
 
     const { r: nr, g: ng, b: nb } = this.hslToRgb(h, sat, light);
     return `rgb(${Math.round(nr)}, ${Math.round(ng)}, ${Math.round(nb)})`;
@@ -251,8 +250,12 @@ class BloomVisualization {
     const amp = this.minmax(this.samplesBuffer, this.flowerIndex);
     const avg = this.runningAverage(this.samplesBuffer, this.flowerIndex);
 
+    const spacing =
+      (this.flowerIndex - this.lastBreak + this.maxBufferSize) %
+      this.maxBufferSize;
+
     // Only draw if we have a peak and enough spacing from last bloom
-    if (amp !== 0 && this.flowerIndex - this.lastBreak > 5) {
+    if (amp !== 0 && spacing > 5) {
       // Calculate relative height
       const relativeHeight = Math.abs(amp) / avg;
 
@@ -271,10 +274,13 @@ class BloomVisualization {
         this.canvasCssHeight -
         ((5 * (this.flowerIndex + 100)) % this.canvasCssHeight);
       const secondDerivScale = 200;
-      const normSecondDeriv = Math.max(
+      const clampedSecondDeriv = Math.max(
         -1,
         Math.min(1, secondDeriv / secondDerivScale),
       );
+      const normSecondDeriv =
+        Math.sign(clampedSecondDeriv) *
+        Math.pow(Math.abs(clampedSecondDeriv), 0.75);
 
       const clampPadding = Math.round(
         Math.min(this.canvasCssWidth, this.canvasCssHeight) *
@@ -313,7 +319,7 @@ class BloomVisualization {
       this.lastBreak = this.flowerIndex;
     }
 
-    this.flowerIndex++;
+    this.flowerIndex = (this.flowerIndex + 1) % this.maxBufferSize;
 
     // Clean up old flowers
     this.removeOldFlowers();
@@ -558,7 +564,7 @@ class BloomVisualization {
   // Add new seismic data to buffer
   addData(value) {
     this.samplesBuffer[this.bufferCount % this.maxBufferSize] = value;
-    this.bufferCount++;
+    this.bufferCount = (this.bufferCount + 1) % this.maxBufferSize;
   }
 
   // Utility: RGB ↔ HSL conversion
@@ -655,6 +661,9 @@ async function poll(bloom) {
     segment.y.forEach((sample) => bloom.addData(sample));
   } catch (error) {
     console.error("Error fetching seismic data:", error);
+    posthog.captureException("seismic_data_fetch_error", {
+      error: error.message,
+    });
     feedSyntheticSamples(bloom);
   }
 
