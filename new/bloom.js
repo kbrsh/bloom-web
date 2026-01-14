@@ -661,9 +661,6 @@ async function poll(bloom) {
     segment.y.forEach((sample) => bloom.addData(sample));
   } catch (error) {
     console.error("Error fetching seismic data:", error);
-    posthog.captureException("seismic_data_fetch_error", {
-      error: error.message,
-    });
     feedSyntheticSamples(bloom);
   }
 
@@ -731,4 +728,22 @@ window.addEventListener("DOMContentLoaded", () => {
 
   // Start fetching real seismic data
   poll(bloom);
+});
+
+// Network downtime monitoring
+let downtimeStartMs = null;
+
+window.addEventListener("offline", () => {
+  if (downtimeStartMs === null) {
+    downtimeStartMs = Date.now();
+  }
+});
+
+window.addEventListener("online", () => {
+  if (downtimeStartMs === null || !navigator.onLine) return;
+  const downtimeMs = Date.now() - downtimeStartMs;
+  posthog.captureException("seismic_data_fetch_error", {
+    downtimeSeconds: Math.round(downtimeMs / 1000),
+  });
+  downtimeStartMs = null;
 });
