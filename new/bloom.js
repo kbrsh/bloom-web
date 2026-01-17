@@ -520,7 +520,7 @@ class BloomVisualization {
 
     const link = document.createElement("a");
     link.href = captureCanvas.toDataURL("image/png");
-    link.download = `bloom-snapshot-${Date.now()}.png`;
+    link.download = `rebloom-snapshot-${Date.now()}.png`;
     link.click();
   }
 
@@ -691,14 +691,14 @@ function generateSyntheticSamples(count) {
     syntheticState.value *= 0.95;
 
     // Occasional spikes to mimic events.
-    if (syntheticState.spike <= 0 && Math.random() < 0.008) {
+    if (syntheticState.spike <= 0 && Math.random() < 0.003) {
       syntheticState.spike =
-        randn() * (syntheticState.std * (1.5 + Math.random() * 1.5));
+        randn() * (syntheticState.std * (0.7 + Math.random() * 0.8));
     }
     let spike = 0;
     if (syntheticState.spike > 0) {
       spike = syntheticState.spike;
-      syntheticState.spike *= 0.7;
+      syntheticState.spike *= 0.8;
       if (Math.abs(syntheticState.spike) < 1) {
         syntheticState.spike = 0;
       }
