@@ -1,18 +1,44 @@
 // Bloom Seismic Visualization
 // Modern web implementation faithful to original Flash version
 
+const STATION = {
+  network: "NN",
+  station: "JVTV",
+  location: "--",
+  channel: "HNZ",
+  label: "NN.JVTV..HNZ",
+  units: "m/s^2",
+  countsPerAcceleration: 160558,
+};
+
+const ACCELERATION_SCALE = {
+  baselineAlpha: 0.001,
+  bloomStart: 0.00005,
+  fullBloom: 0.05,
+  secondDerivative: 0.0005,
+};
+
+const DATA_SERVICE_URL = "https://service.earthscope.org/fdsnws/dataselect/1/query";
+const POLL_INTERVAL_MS = 10000;
+const DATA_LATENCY_MS = 30000;
+const SYNTHETIC_SAMPLE_RATE = 50;
+const SYNTHETIC_ACCELERATION_STD = 0.00008;
+
 class BloomVisualization {
   constructor() {
     // Configuration variables from original documentation
     this.animationDelay = 150; // Animation speed (ms)
     this.maxBufferSize = 4000; // Circular buffer size
     this.maxNumFlowers = 30; // Max blooms on canvas
-    this.thinStripe = 10; // Thin stripe width
-    this.regularStripe = 30; // Regular stripe width
-    this.zoomDuration = 600; // Zoom effect duration
     this.clampPaddingRatio = 0.12;
     this.showClampBox = false;
-    this.useSyntheticData = false;
+    this.countsPerAcceleration = STATION.countsPerAcceleration;
+    this.accelerationBaseline = null;
+    this.maxObservedAcceleration = 0;
+    this.baselineAlpha = ACCELERATION_SCALE.baselineAlpha;
+    this.bloomStartAcceleration = ACCELERATION_SCALE.bloomStart;
+    this.fullBloomAcceleration = ACCELERATION_SCALE.fullBloom;
+    this.secondDerivativeScale = ACCELERATION_SCALE.secondDerivative;
 
     // Data structures
     this.samplesBuffer = new Array(this.maxBufferSize);
@@ -30,9 +56,6 @@ class BloomVisualization {
     this.paletteCtx = this.paletteCanvas.getContext("2d");
     this.paletteReady = false;
     this.highlightColors = []; // Small set of prominent/interesting colors to mix in
-
-    // Animation timer
-    this.animationTimer = null;
 
     // Initialize with zeros
     for (let i = 0; i < this.maxBufferSize; i++) {
@@ -54,10 +77,6 @@ class BloomVisualization {
     window.addEventListener("resize", () => {
       this.resizeCanvas();
     });
-
-    // Initialize stripe sizes based on canvas height
-    this.thinStripe = (1 / 100) * this.canvasCssHeight;
-    this.regularStripe = 2 * this.thinStripe;
   }
 
   resizeCanvas() {
@@ -76,9 +95,6 @@ class BloomVisualization {
 
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.ctx.scale(ratio, ratio);
-
-    this.thinStripe = (1 / 100) * cssHeight;
-    this.regularStripe = 2 * this.thinStripe;
   }
   preparePalette(imageId) {
     const img = document.getElementById(imageId);
@@ -208,22 +224,6 @@ class BloomVisualization {
     return series[index] || 0;
   }
 
-  // Section 3.0.22: Standard windowed running average
-  runningAverage(series, c, windowSize = 50) {
-    let sum = 0;
-    let count = 0;
-
-    for (let i = 0; i < windowSize; i++) {
-      const idx = c - i;
-      if (idx >= 0) {
-        sum += Math.abs(this.value(series, idx));
-        count++;
-      }
-    }
-
-    return count > 0 ? sum / count : 1;
-  }
-
   // Section 3.0.24: Minimax - detect local maxima only
   // Returns amplitude if current spot is a peak, 0 otherwise
   // Note: Original Flash version only triggered on maxima, not minima
@@ -248,7 +248,6 @@ class BloomVisualization {
   onFlowerTimer() {
     // Check if current spot is a peak
     const amp = this.minmax(this.samplesBuffer, this.flowerIndex);
-    const avg = this.runningAverage(this.samplesBuffer, this.flowerIndex);
 
     const spacing =
       (this.flowerIndex - this.lastBreak + this.maxBufferSize) %
@@ -256,8 +255,9 @@ class BloomVisualization {
 
     // Only draw if we have a peak and enough spacing from last bloom
     if (amp !== 0 && spacing > 5) {
-      // Calculate relative height
-      const relativeHeight = Math.abs(amp) / avg;
+      // Size blooms from calibrated acceleration.
+      const absAcceleration = Math.abs(amp);
+      const physicalScale = this.accelerationToBloomScale(absAcceleration);
 
       // Calculate second derivative for Y position
       const secondDeriv =
@@ -267,16 +267,17 @@ class BloomVisualization {
 
       // Calculate size based on viewport min dimension
       const minDim = Math.min(this.canvasCssWidth, this.canvasCssHeight);
-      let size = relativeHeight * (minDim * 0.15);
+      const minSize = minDim * 0.03;
+      const maxSize = minDim * 0.5;
+      let size = minSize + physicalScale * (maxSize - minSize);
 
       // Calculate position (bottom-to-top sweep)
       let fY =
         this.canvasCssHeight -
         ((5 * (this.flowerIndex + 100)) % this.canvasCssHeight);
-      const secondDerivScale = 200;
       const clampedSecondDeriv = Math.max(
         -1,
-        Math.min(1, secondDeriv / secondDerivScale),
+        Math.min(1, secondDeriv / this.secondDerivativeScale),
       );
       const normSecondDeriv =
         Math.sign(clampedSecondDeriv) *
@@ -305,14 +306,12 @@ class BloomVisualization {
         clampPadding,
         this.canvasCssWidth - clampPadding,
       );
-      const minSize = minDim * 0.03;
-      const maxSize = minDim * 0.5;
       size = Math.max(minSize, Math.min(maxSize, size));
 
       // Draw flower if size is significant
       if (this.lastBreak === 0) {
         this.drawFlower(fX, fY, minSize);
-      } else if (size > minSize) {
+      } else if (physicalScale > 0) {
         this.drawFlower(fX, fY, size);
       }
 
@@ -542,7 +541,7 @@ class BloomVisualization {
 
   // Start the animation
   start() {
-    this.animationTimer = setInterval(() => {
+    setInterval(() => {
       this.onFlowerTimer();
     }, this.animationDelay);
 
@@ -554,17 +553,51 @@ class BloomVisualization {
     renderLoop();
   }
 
-  // Stop the animation
-  stop() {
-    if (this.animationTimer) {
-      clearInterval(this.animationTimer);
+  addCounts(counts) {
+    this.addAcceleration(counts / this.countsPerAcceleration);
+  }
+
+  addAcceleration(acceleration) {
+    if (!Number.isFinite(acceleration)) return;
+
+    if (this.accelerationBaseline === null) {
+      this.accelerationBaseline = acceleration;
+    }
+
+    this.accelerationBaseline +=
+      (acceleration - this.accelerationBaseline) * this.baselineAlpha;
+
+    const detrendedAcceleration = acceleration - this.accelerationBaseline;
+    this.maxObservedAcceleration = Math.max(
+      this.maxObservedAcceleration * 0.999,
+      Math.abs(detrendedAcceleration),
+    );
+    this.samplesBuffer[this.bufferCount % this.maxBufferSize] =
+      detrendedAcceleration;
+    this.bufferCount = (this.bufferCount + 1) % this.maxBufferSize;
+
+    if (this.canvas && this.bufferCount % 100 === 0) {
+      this.canvas.dataset.bufferCount = String(this.bufferCount);
+      this.canvas.dataset.latestAcceleration =
+        detrendedAcceleration.toExponential(4);
+      this.canvas.dataset.maxObservedAcceleration =
+        this.maxObservedAcceleration.toExponential(4);
+      this.canvas.dataset.units = STATION.units;
     }
   }
 
-  // Add new seismic data to buffer
-  addData(value) {
-    this.samplesBuffer[this.bufferCount % this.maxBufferSize] = value;
-    this.bufferCount = (this.bufferCount + 1) % this.maxBufferSize;
+  accelerationToBloomScale(absAcceleration) {
+    if (absAcceleration <= this.bloomStartAcceleration) return 0;
+
+    const minLog = Math.log10(this.bloomStartAcceleration);
+    const maxLog = Math.log10(this.fullBloomAcceleration);
+    const valueLog = Math.log10(absAcceleration);
+    const t = Math.max(
+      0,
+      Math.min(1, (valueLog - minLog) / (maxLog - minLog)),
+    );
+
+    return t * t * (3 - 2 * t);
   }
 
   // Utility: RGB ↔ HSL conversion
@@ -622,32 +655,31 @@ class BloomVisualization {
   }
 }
 
-// Seismic data fetching from NCEDC
-const net = ["BK", "BP"];
-const sta = ["BKS"];
-const loc = "00";
-const cha = ["BHE", "BHN", "BHZ"];
-const interval = 10000;
-let lastTime = Date.now() - interval;
-const syntheticSampleRate = 50;
-const syntheticState = { value: 0, velocity: 0, spike: 0, mean: 0, std: 3000 };
+// Seismic data fetching from EarthScope for NN.JVTV..HNZ.
+let lastTime = Date.now() - DATA_LATENCY_MS - POLL_INTERVAL_MS;
+const syntheticState = {
+  value: 0,
+  velocity: 0,
+  spike: 0,
+  std: SYNTHETIC_ACCELERATION_STD,
+};
 
 function formatTime(timestamp) {
-  const pad = (num) => String(num).padStart(2, "0");
-  const date = new Date(timestamp);
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  return new Date(timestamp).toISOString().replace(/\.\d{3}Z$/, "");
 }
 
 async function poll(bloom) {
-  const currentTime = Date.now();
-  if (bloom.useSyntheticData) {
-    lastTime = currentTime;
-    feedSyntheticSamples(bloom);
-    setTimeout(() => poll(bloom), interval);
-    return;
-  }
-
-  const url = `https://service.ncedc.org/fdsnws/dataselect/1/query?net=${net.join(",")}&sta=${sta.join(",")}&loc=${loc}&cha=${cha.join(",")}&start=${formatTime(lastTime)}&end=${formatTime(currentTime)}`;
+  const currentTime = Date.now() - DATA_LATENCY_MS;
+  const params = new URLSearchParams({
+    net: STATION.network,
+    sta: STATION.station,
+    loc: STATION.location,
+    cha: STATION.channel,
+    start: formatTime(lastTime),
+    end: formatTime(currentTime),
+    nodata: "404",
+  });
+  const url = `${DATA_SERVICE_URL}?${params}`;
   lastTime = currentTime;
 
   try {
@@ -658,30 +690,35 @@ async function poll(bloom) {
     const arrayBuffer = await response.arrayBuffer();
     const dataRecords = miniseed.parseDataRecords(arrayBuffer);
     const segment = miniseed.createSeismogramSegment(dataRecords);
-    segment.y.forEach((sample) => bloom.addData(sample));
+    segment.y.forEach((sample) => bloom.addCounts(sample));
+    updateDataStatus("live", segment.y.length);
   } catch (error) {
     console.error("Error fetching seismic data:", error);
-    feedSyntheticSamples(bloom);
+    updateDataStatus("synthetic", feedSyntheticSamples(bloom));
   }
 
-  setTimeout(() => poll(bloom), interval);
+  setTimeout(() => poll(bloom), POLL_INTERVAL_MS);
+}
+
+function updateDataStatus(source, sampleCount) {
+  document.body.dataset.seismicSource = source;
+  document.body.dataset.seismicStation = STATION.label;
+  document.body.dataset.seismicUnits = STATION.units;
+  document.body.dataset.seismicSampleCount = String(sampleCount);
+  document.body.dataset.seismicUpdatedAt = new Date().toISOString();
 }
 
 function feedSyntheticSamples(bloom) {
   const sampleCount = Math.max(
     1,
-    Math.round((interval / 1000) * syntheticSampleRate),
+    Math.round((POLL_INTERVAL_MS / 1000) * SYNTHETIC_SAMPLE_RATE),
   );
   const synthetic = generateSyntheticSamples(sampleCount);
-  synthetic.forEach((sample) => bloom.addData(sample));
+  synthetic.forEach((sample) => bloom.addAcceleration(sample));
+  return sampleCount;
 }
 
 function generateSyntheticSamples(count) {
-  if (syntheticState.mean === 0) {
-    syntheticState.mean = 1500 + Math.random() * 1000;
-    syntheticState.std = 2500 + Math.random() * 1800;
-  }
-
   const samples = new Array(count);
   for (let i = 0; i < count; i += 1) {
     // Low-frequency drift with gentle damping.
@@ -690,22 +727,22 @@ function generateSyntheticSamples(count) {
     syntheticState.value += syntheticState.velocity;
     syntheticState.value *= 0.95;
 
-    // Occasional spikes to mimic events.
-    if (syntheticState.spike <= 0 && Math.random() < 0.003) {
+    // Occasional acceleration spikes to mimic nearby seismic motion.
+    if (syntheticState.spike === 0 && Math.random() < 0.003) {
       syntheticState.spike =
-        randn() * (syntheticState.std * (0.7 + Math.random() * 0.8));
+        randn() * (syntheticState.std * (5 + Math.random() * 25));
     }
     let spike = 0;
-    if (syntheticState.spike > 0) {
+    if (syntheticState.spike !== 0) {
       spike = syntheticState.spike;
       syntheticState.spike *= 0.8;
-      if (Math.abs(syntheticState.spike) < 1) {
+      if (Math.abs(syntheticState.spike) < syntheticState.std * 0.02) {
         syntheticState.spike = 0;
       }
     }
 
     const noise = randn() * (syntheticState.std * 0.15);
-    samples[i] = syntheticState.mean + syntheticState.value + noise + spike;
+    samples[i] = syntheticState.value + noise + spike;
   }
   return samples;
 }
