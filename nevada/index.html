@@ -119,12 +119,12 @@
             <input type="checkbox" id="clampToggle" />
             Show boundaries
         </label>
-        <img id="palettePreview" src="default.jpg" alt="Palette preview" />
+        <img id="palettePreview" src="palettes/Jean-LaMarr-Going Back to the Rez, 1974.jpg" alt="Palette preview" />
         <button id="snapshotButton" type="button">Capture snapshot</button>
     </div>
-    <img id="paletteImage" src="default.jpg" />
+    <img id="paletteImage" src="palettes/Jean-LaMarr-Going Back to the Rez, 1974.jpg" />
     <div id="paletteOverlay">
-        <img id="paletteOverlayImage" src="default.jpg" alt="Palette full screen" />
+        <img id="paletteOverlayImage" src="palettes/Jean-LaMarr-Going Back to the Rez, 1974.jpg" alt="Palette full screen" />
     </div>
 
     <script type="module" src="../js/seisplotjs_3.1.4_standalone.mjs"></script>
@@ -145,6 +145,54 @@
         const paletteImage = document.getElementById('paletteImage');
         const paletteOverlay = document.getElementById('paletteOverlay');
         const paletteOverlayImage = document.getElementById('paletteOverlayImage');
+        const palettePreview = document.getElementById('palettePreview');
+        const PALETTE_ROTATION_INTERVAL_MS = 60 * 1000;
+        const PALETTE_FILES = [
+            'palettes/Jean-LaMarr-Going Back to the Rez, 1974.jpg',
+            'palettes/Phyllis-Shafer-Hope Valley Morning, 2007.jpg',
+            'palettes/Maynard-Dixon-Edge of the Amargosa Desert, 1927.jpg',
+            'palettes/Sandow-Birk-The Rape of the Sierra (Logging and Mining Lake Tahoe in the 1860s), 2020.jpeg',
+            'palettes/Chester-Arnold-Fin du Siecle, 1992.jpg',
+        ];
+        let currentPaletteIndex = 0;
+        let paletteRequestId = 0;
+
+        function applyPalette(src) {
+            const requestId = ++paletteRequestId;
+            const loader = new Image();
+
+            loader.onload = () => {
+                if (requestId !== paletteRequestId) return;
+
+                paletteImage.src = src;
+                palettePreview.src = src;
+                paletteOverlayImage.src = src;
+                document.body.dataset.palette = src;
+                bloom.preparePalette('paletteImage');
+            };
+
+            loader.onerror = () => {
+                console.error(`Unable to load palette: ${src}`);
+            };
+
+            loader.src = src;
+        }
+
+        function startPaletteRotation() {
+            document.body.dataset.palette = PALETTE_FILES[currentPaletteIndex];
+
+            // Warm the browser cache so later palette changes happen promptly.
+            PALETTE_FILES.slice(1).forEach((src) => {
+                const image = new Image();
+                image.src = src;
+            });
+
+            setInterval(() => {
+                currentPaletteIndex = (currentPaletteIndex + 1) % PALETTE_FILES.length;
+                applyPalette(PALETTE_FILES[currentPaletteIndex]);
+            }, PALETTE_ROTATION_INTERVAL_MS);
+        }
+
         document.getElementById('stationLabel').textContent = STATION.label;
 
         document.getElementById('customUpload').onchange = function(e) {
@@ -152,8 +200,10 @@
             if (file) {
                 const reader = new FileReader();
                 reader.onload = (event) => {
+                    // Prevent a palette load already in flight from replacing this upload.
+                    paletteRequestId += 1;
                     paletteImage.src = event.target.result;
-                    document.getElementById('palettePreview').src = event.target.result;
+                    palettePreview.src = event.target.result;
                     paletteOverlayImage.src = event.target.result;
                     bloom.preparePalette('paletteImage');
                 };
@@ -173,6 +223,7 @@
 
         window.addEventListener('DOMContentLoaded', () => {
               bloom.showClampBox = clampToggle.checked;
+              startPaletteRotation();
         });
 
         document.addEventListener('keydown', (e) => {
