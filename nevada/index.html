@@ -119,6 +119,10 @@
             <input type="checkbox" id="clampToggle" />
             Show boundaries
         </label>
+        <label class="menuOption">
+            <input type="checkbox" id="paletteModeToggle" checked />
+            Cycle palettes
+        </label>
         <img id="palettePreview" src="palettes/Jean-LaMarr-Going Back to the Rez, 1974.jpg" alt="Palette preview" />
         <button id="snapshotButton" type="button">Capture snapshot</button>
     </div>
@@ -156,6 +160,7 @@
         ];
         let currentPaletteIndex = 0;
         let paletteRequestId = 0;
+        let paletteRotationTimer = null;
 
         function applyPalette(src) {
             const requestId = ++paletteRequestId;
@@ -180,6 +185,9 @@
 
         function startPaletteRotation() {
             document.body.dataset.palette = PALETTE_FILES[currentPaletteIndex];
+            document.body.dataset.paletteMode = 'multiple';
+
+            if (paletteRotationTimer !== null) return;
 
             // Warm the browser cache so later palette changes happen promptly.
             PALETTE_FILES.slice(1).forEach((src) => {
@@ -187,10 +195,21 @@
                 image.src = src;
             });
 
-            setInterval(() => {
+            paletteRotationTimer = setInterval(() => {
                 currentPaletteIndex = (currentPaletteIndex + 1) % PALETTE_FILES.length;
                 applyPalette(PALETTE_FILES[currentPaletteIndex]);
             }, PALETTE_ROTATION_INTERVAL_MS);
+        }
+
+        function stopPaletteRotation() {
+            if (paletteRotationTimer !== null) {
+                clearInterval(paletteRotationTimer);
+                paletteRotationTimer = null;
+            }
+
+            // Keep the image currently on screen and ignore any pending change.
+            paletteRequestId += 1;
+            document.body.dataset.paletteMode = 'single';
         }
 
         document.getElementById('stationLabel').textContent = STATION.label;
@@ -216,14 +235,23 @@
         };
 
         const clampToggle = document.getElementById('clampToggle');
+        const paletteModeToggle = document.getElementById('paletteModeToggle');
 
         clampToggle.onchange = function() {
               bloom.showClampBox = clampToggle.checked;
         };
 
+        paletteModeToggle.onchange = function() {
+              if (paletteModeToggle.checked) {
+                  startPaletteRotation();
+              } else {
+                  stopPaletteRotation();
+              }
+        };
+
         window.addEventListener('DOMContentLoaded', () => {
               bloom.showClampBox = clampToggle.checked;
-              startPaletteRotation();
+              paletteModeToggle.onchange();
         });
 
         document.addEventListener('keydown', (e) => {
