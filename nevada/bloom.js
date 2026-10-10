@@ -2,13 +2,13 @@
 // Modern web implementation faithful to original Flash version
 
 const STATION = {
-  network: "NN",
-  station: "JVTV",
-  location: "--",
+  network: "BK",
+  station: "CMSB",
+  location: "00",
   channel: "HNZ",
-  label: "NN.JVTV..HNZ",
+  label: "BK.CMSB.00.HNZ",
   units: "m/s^2",
-  countsPerAcceleration: 160558,
+  countsPerAcceleration: 214467,
 };
 
 const ACCELERATION_SCALE = {
@@ -18,7 +18,7 @@ const ACCELERATION_SCALE = {
   secondDerivative: 0.0005,
 };
 
-const DATA_SERVICE_URL = "https://service.earthscope.org/fdsnws/dataselect/1/query";
+const DATA_SERVICE_URL = "https://service.ncedc.org/fdsnws/dataselect/1/query";
 const POLL_INTERVAL_MS = 10000;
 const DATA_LATENCY_MS = 30000;
 const SYNTHETIC_SAMPLE_RATE = 50;
@@ -655,7 +655,7 @@ class BloomVisualization {
   }
 }
 
-// Seismic data fetching from EarthScope for NN.JVTV..HNZ.
+// Seismic data fetching from NCEDC for BK.CMSB.00.HNZ.
 let lastTime = Date.now() - DATA_LATENCY_MS - POLL_INTERVAL_MS;
 const syntheticState = {
   value: 0,
