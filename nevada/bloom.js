@@ -2,23 +2,23 @@
 // Modern web implementation faithful to original Flash version
 
 const STATION = {
-  network: "BK",
-  station: "CMSB",
-  location: "00",
+  network: "NN",
+  station: "RYN",
+  location: "--",
   channel: "HNZ",
-  label: "BK.CMSB.00.HNZ",
+  label: "NN.RYN..HNZ",
   units: "m/s^2",
-  countsPerAcceleration: 214467,
+  countsPerAcceleration: 105793,
 };
 
 const ACCELERATION_SCALE = {
   baselineAlpha: 0.001,
-  bloomStart: 0.00005,
-  fullBloom: 0.05,
-  secondDerivative: 0.0005,
+  bloomStart: 0.00001,
+  fullBloom: 0.001,
+  secondDerivative: 0.00005,
 };
 
-const DATA_SERVICE_URL = "https://service.ncedc.org/fdsnws/dataselect/1/query";
+const DATA_SERVICE_URL = "https://service.earthscope.org/fdsnws/dataselect/1/query";
 const POLL_INTERVAL_MS = 10000;
 const DATA_LATENCY_MS = 30000;
 const SYNTHETIC_SAMPLE_RATE = 50;
@@ -42,6 +42,7 @@ class BloomVisualization {
 
     // Data structures
     this.samplesBuffer = new Array(this.maxBufferSize);
+    this.positionSamplesBuffer = new Array(this.maxBufferSize).fill(0);
     this.bufferCount = 0;
     this.flowerIndex = 0;
     this.lastBreak = 0;
@@ -259,11 +260,11 @@ class BloomVisualization {
       const absAcceleration = Math.abs(amp);
       const physicalScale = this.accelerationToBloomScale(absAcceleration);
 
-      // Calculate second derivative for Y position
+      // Calculate second derivative for horizontal position only.
       const secondDeriv =
-        this.value(this.samplesBuffer, this.flowerIndex - 2) -
-        2 * this.value(this.samplesBuffer, this.flowerIndex - 1) +
-        this.value(this.samplesBuffer, this.flowerIndex);
+        this.value(this.positionSamplesBuffer, this.flowerIndex - 2) -
+        2 * this.value(this.positionSamplesBuffer, this.flowerIndex - 1) +
+        this.value(this.positionSamplesBuffer, this.flowerIndex);
 
       // Calculate size based on viewport min dimension
       const minDim = Math.min(this.canvasCssWidth, this.canvasCssHeight);
@@ -554,10 +555,14 @@ class BloomVisualization {
   }
 
   addCounts(counts) {
-    this.addAcceleration(counts / this.countsPerAcceleration);
+    // Store one +/- half-count jitter per sample, for placement only.
+    this.addAcceleration(
+      counts / this.countsPerAcceleration,
+      (Math.random() - 0.5) / this.countsPerAcceleration,
+    );
   }
 
-  addAcceleration(acceleration) {
+  addAcceleration(acceleration, positionJitter = 0) {
     if (!Number.isFinite(acceleration)) return;
 
     if (this.accelerationBaseline === null) {
@@ -574,6 +579,8 @@ class BloomVisualization {
     );
     this.samplesBuffer[this.bufferCount % this.maxBufferSize] =
       detrendedAcceleration;
+    this.positionSamplesBuffer[this.bufferCount % this.maxBufferSize] =
+      detrendedAcceleration + positionJitter;
     this.bufferCount = (this.bufferCount + 1) % this.maxBufferSize;
 
     if (this.canvas && this.bufferCount % 100 === 0) {
@@ -655,7 +662,7 @@ class BloomVisualization {
   }
 }
 
-// Seismic data fetching from NCEDC for BK.CMSB.00.HNZ.
+// Seismic data fetching from EarthScope for NN.RYN..HNZ.
 let lastTime = Date.now() - DATA_LATENCY_MS - POLL_INTERVAL_MS;
 const syntheticState = {
   value: 0,
